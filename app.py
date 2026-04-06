@@ -59,7 +59,14 @@ NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 def load_county_data():
     resp = requests.get(COUNTY_GEOJSON_URL, timeout=30)
     resp.raise_for_status()
-    return resp.json()
+    data = resp.json()
+    # Pre-build a display label so the tooltip shows "Warren County, NC"
+    for feature in data["features"]:
+        props = feature["properties"]
+        name = props.get("NAME", "")
+        state_abbr = FIPS_TO_STATE.get(props.get("STATE", ""), props.get("STATE", ""))
+        props["LABEL"] = f"{name} County, {state_abbr}"
+    return data
 
 
 @st.cache_data(show_spinner=False)
@@ -167,16 +174,10 @@ if county_data:
             "weight": 0.5,
             "opacity": 0.6,
         },
-        highlight_function=lambda _: {
-            "fillColor": "#2563eb",
-            "fillOpacity": 0.25,
-            "color": "#000000",
-            "weight": 2.5,
-            "opacity": 1.0,
-        },
         tooltip=folium.GeoJsonTooltip(
-            fields=["NAME", "STATE"],
-            aliases=["County:", "State FIPS:"],
+            fields=["LABEL"],
+            aliases=[""],
+            labels=False,
             localize=True,
             sticky=True,
             style=(

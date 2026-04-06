@@ -54,14 +54,6 @@ const defaultStyle = () => ({
   opacity: 0.6,
 })
 
-const hoverStyle = () => ({
-  fillColor: '#2563eb',
-  fillOpacity: 0.2,
-  color: '#1d4ed8',
-  weight: 1.5,
-  opacity: 1,
-})
-
 const selectedStyle = () => ({
   fillColor: '#3b82f6',
   fillOpacity: 0.25,
@@ -143,17 +135,6 @@ export default function CountyMap() {
     const stateAbbr = FIPS_TO_STATE[fips] || fips
 
     layer.on({
-      mouseover(e) {
-        if (selectedLayerRef.current !== e.target) {
-          e.target.setStyle(hoverStyle())
-        }
-        e.target.bringToFront()
-      },
-      mouseout(e) {
-        if (selectedLayerRef.current !== e.target) {
-          e.target.setStyle(defaultStyle())
-        }
-      },
       click(e) {
         // Deselect previous county
         if (selectedLayerRef.current && selectedLayerRef.current !== e.target) {
@@ -171,7 +152,7 @@ export default function CountyMap() {
       },
     })
 
-    layer.bindTooltip(name, {
+    layer.bindTooltip(`${name} County, ${stateAbbr}`, {
       sticky: true,
       className: 'county-tooltip',
     })
