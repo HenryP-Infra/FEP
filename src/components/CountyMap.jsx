@@ -15,9 +15,9 @@ L.Icon.Default.mergeOptions({
 })
 
 const TILE_LAYERS = {
-  satellite: {
-    label: 'Satellite',
-    url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+  roadmap: {
+    label: 'Google Maps',
+    url: 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
     attribution: '&copy; <a href="https://maps.google.com">Google Maps</a>',
     maxZoom: 20,
   },
@@ -76,7 +76,7 @@ function SearchMarker({ position, markerRef }) {
 }
 
 export default function CountyMap() {
-  const [activeLayer, setActiveLayer] = useState('satellite')
+  const [activeLayer, setActiveLayer] = useState('roadmap')
   const [countyData, setCountyData] = useState(null)
   const [loadError, setLoadError] = useState(null)
   const [hoveredCounty, setHoveredCounty] = useState(null)

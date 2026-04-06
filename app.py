@@ -18,8 +18,8 @@ COUNTY_GEOJSON_URL = (
 )
 
 TILE_LAYERS = {
-    "Satellite": {
-        "tiles": "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+    "Google Maps": {
+        "tiles": "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
         "attr": "© Google Maps",
     },
     "Terrain": {
@@ -77,14 +77,10 @@ with st.sidebar:
     st.title("🗺️ US County Map")
     st.markdown("---")
 
-    # Layer selector
+    # Layer toggle
     st.subheader("Map Layer")
-    active_layer = st.radio(
-        "Select a base layer",
-        list(TILE_LAYERS.keys()),
-        label_visibility="collapsed",
-        horizontal=True,
-    )
+    show_terrain = st.toggle("Show Terrain", value=False)
+    active_layer = "Terrain" if show_terrain else "Google Maps"
 
     st.markdown("---")
 
