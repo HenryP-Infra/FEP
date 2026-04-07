@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
+import { MapContainer, GeoJSON, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import AddressSearch from './AddressSearch'
-import LayerControl from './LayerControl'
+import StateCountySearch from './StateCountySearch'
+import PermitsPanel from './PermitsPanel'
 import './CountyMap.css'
 
 // Fix leaflet default marker icons
@@ -14,7 +14,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 })
 
-// ── FIPS → state abbreviation ───────────────────────────────────────────────
+// ── FIPS → state abbreviation ────────────────────────────────────────────────
 const FIPS_TO_STATE = {
   '01':'AL','02':'AK','04':'AZ','05':'AR','06':'CA','08':'CO','09':'CT',
   '10':'DE','11':'DC','12':'FL','13':'GA','15':'HI','16':'ID','17':'IL',
@@ -26,26 +26,16 @@ const FIPS_TO_STATE = {
   '55':'WI','56':'WY','72':'PR','78':'VI',
 }
 
-// ── Tile layers ─────────────────────────────────────────────────────────────
-const TILE_LAYERS = {
-  roadmap: {
-    label: 'Google Maps',
-    url: 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
-    attribution: '&copy; <a href="https://maps.google.com">Google Maps</a>',
-    maxZoom: 20,
-  },
-  terrain: {
-    label: 'Terrain',
-    url: 'https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
-    attribution: '&copy; <a href="https://maps.google.com">Google Maps</a>',
-    maxZoom: 20,
-  },
+// Terrain tile only
+const TERRAIN = {
+  url: 'https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
+  attribution: '&copy; <a href="https://maps.google.com">Google Maps</a>',
+  maxZoom: 20,
 }
 
 const COUNTY_GEOJSON_URL =
   'https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json'
 
-// ── Style functions ──────────────────────────────────────────────────────────
 const defaultStyle = () => ({
   fillColor: '#4a90e2',
   fillOpacity: 0.08,
@@ -62,56 +52,44 @@ const selectedStyle = () => ({
   opacity: 1,
 })
 
-// ── Internal map helpers ─────────────────────────────────────────────────────
-function TileLayerUpdater({ url, attribution, maxZoom }) {
+// ── Map helpers (must live inside MapContainer) ──────────────────────────────
+function TileLayerUpdater() {
   const map = useMap()
-  const tileRef = useRef(null)
-
+  const ref = useRef(null)
   useEffect(() => {
-    if (!tileRef.current) {
-      tileRef.current = L.tileLayer(url, { attribution, maxZoom }).addTo(map)
-    } else {
-      tileRef.current.setUrl(url)
+    if (!ref.current) {
+      ref.current = L.tileLayer(TERRAIN.url, {
+        attribution: TERRAIN.attribution,
+        maxZoom: TERRAIN.maxZoom,
+      }).addTo(map)
     }
-  }, [map, url, attribution, maxZoom])
-
-  useEffect(() => {
-    return () => { tileRef.current?.remove() }
-  }, [])
-
+    return () => { ref.current?.remove(); ref.current = null }
+  }, [map])
   return null
 }
 
-function MapController({ flyTo }) {
+function MapController({ flyTo, flyToBounds }) {
   const map = useMap()
-  flyTo.current = (latlng, zoom = 10) => {
-    map.flyTo(latlng, zoom, { duration: 1.2 })
-  }
-  return null
-}
-
-function SearchMarker({ position, markerRef }) {
-  const map = useMap()
-  useEffect(() => {
-    const marker = L.marker(position, { title: 'Search result' }).addTo(map)
-    markerRef.current = marker
-    return () => { marker.remove(); markerRef.current = null }
-  }, [map, position, markerRef])
+  flyTo.current = (latlng, zoom = 10) =>
+    map.flyTo(latlng, zoom, { duration: 1.0 })
+  flyToBounds.current = (bounds) =>
+    map.flyToBounds(bounds, { padding: [60, 60], duration: 1.0 })
   return null
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
 export default function CountyMap() {
-  const [activeLayer, setActiveLayer] = useState('roadmap')
   const [countyData, setCountyData] = useState(null)
   const [loadError, setLoadError] = useState(null)
-  const [selectedCounty, setSelectedCounty] = useState(null)
-  const [markerPosition, setMarkerPosition] = useState(null)
-  const flyToRef = useRef(null)
-  const markerRef = useRef(null)
-  const selectedLayerRef = useRef(null)
+  const [selectedStateFips, setSelectedStateFips] = useState(null)
+  const [selectedCounty, setSelectedCounty] = useState(null) // { name, stateAbbr }
 
-  // Load county GeoJSON once
+  const flyToRef = useRef(null)
+  const flyToBoundsRef = useRef(null)
+  const selectedLayerRef = useRef(null)
+  const layersRef = useRef({}) // "fips::name" → Leaflet layer
+
+  // Load GeoJSON once
   useEffect(() => {
     let cancelled = false
     async function load() {
@@ -122,33 +100,39 @@ export default function CountyMap() {
         if (!cancelled) setCountyData(data)
       } catch (err) {
         if (!cancelled) setLoadError('Failed to load county data. Please refresh.')
-        console.error('County GeoJSON load error:', err)
+        console.error(err)
       }
     }
     load()
     return () => { cancelled = true }
   }, [])
 
+  // ── Shared selection logic ────────────────────────────────────────────────
+  const applySelection = useCallback((layer, name, stateAbbr) => {
+    if (selectedLayerRef.current && selectedLayerRef.current !== layer) {
+      selectedLayerRef.current.setStyle(defaultStyle())
+    }
+    if (layer) {
+      layer.setStyle(selectedStyle())
+      layer.bringToFront()
+      selectedLayerRef.current = layer
+      flyToBoundsRef.current?.(layer.getBounds())
+    }
+    setSelectedCounty({ name, stateAbbr })
+  }, [])
+
+  // ── GeoJSON feature binding ───────────────────────────────────────────────
   const handleEachFeature = useCallback((feature, layer) => {
-    const name = feature.properties?.NAME || 'Unknown County'
+    const name = feature.properties?.NAME || ''
     const fips = feature.properties?.STATE || ''
     const stateAbbr = FIPS_TO_STATE[fips] || fips
 
+    layersRef.current[`${fips}::${name}`] = layer
+
     layer.on({
-      click(e) {
-        // Deselect previous county
-        if (selectedLayerRef.current && selectedLayerRef.current !== e.target) {
-          selectedLayerRef.current.setStyle(defaultStyle())
-        }
-        // Apply persistent selection style
-        e.target.setStyle(selectedStyle())
-        e.target.bringToFront()
-        selectedLayerRef.current = e.target
-
-        setSelectedCounty({ name, stateAbbr })
-
-        const center = e.target.getBounds().getCenter()
-        flyToRef.current?.([center.lat, center.lng], 9)
+      click() {
+        setSelectedStateFips(fips)
+        applySelection(layer, name, stateAbbr)
       },
     })
 
@@ -156,56 +140,41 @@ export default function CountyMap() {
       sticky: true,
       className: 'county-tooltip',
     })
-  }, [])
+  }, [applySelection])
 
-  const handleAddressFound = useCallback(({ latlng }) => {
-    setMarkerPosition(latlng)
-    flyToRef.current?.(latlng, 12)
-  }, [])
-
-  const handleClosePanel = () => {
-    if (selectedLayerRef.current) {
-      selectedLayerRef.current.setStyle(defaultStyle())
-      selectedLayerRef.current = null
-    }
-    setSelectedCounty(null)
-  }
-
-  const layer = TILE_LAYERS[activeLayer]
+  // ── Dropdown county selection ─────────────────────────────────────────────
+  const handleCountySelect = useCallback(({ name, stateFips, stateAbbr }) => {
+    const layer = layersRef.current[`${stateFips}::${name}`]
+    applySelection(layer, name, stateAbbr)
+    setSelectedCounty({ name, stateAbbr })
+  }, [applySelection])
 
   return (
     <div className="map-wrapper">
       {/* ── Top bar ── */}
       <div className="map-header">
         <span className="map-title">US County Map</span>
-        <AddressSearch onAddressFound={handleAddressFound} />
-        <LayerControl
-          layers={TILE_LAYERS}
-          activeLayer={activeLayer}
-          onLayerChange={setActiveLayer}
+        <StateCountySearch
+          countyData={countyData}
+          selectedStateFips={selectedStateFips}
+          selectedCountyName={selectedCounty?.name}
+          onStateChange={setSelectedStateFips}
+          onCountySelect={handleCountySelect}
         />
       </div>
 
       {loadError && <div className="map-error">{loadError}</div>}
 
-      {/* ── Map + side panel ── */}
+      {/* ── Map ── */}
       <div className="map-body">
         <MapContainer
           center={[39.5, -98.35]}
           zoom={4}
           className="leaflet-map"
           zoomControl={true}
-          // no key — MapContainer is stable; only the tile URL changes
         >
-          <MapController flyTo={flyToRef} />
-
-          {/* Use imperative tile layer so switching URL never resets the viewport */}
-          <TileLayerUpdater
-            url={layer.url}
-            attribution={layer.attribution}
-            maxZoom={layer.maxZoom}
-          />
-
+          <MapController flyTo={flyToRef} flyToBounds={flyToBoundsRef} />
+          <TileLayerUpdater />
           {countyData && (
             <GeoJSON
               key="counties"
@@ -214,28 +183,15 @@ export default function CountyMap() {
               onEachFeature={handleEachFeature}
             />
           )}
-
-          {markerPosition && (
-            <SearchMarker position={markerPosition} markerRef={markerRef} />
-          )}
         </MapContainer>
 
-        {/* ── County info panel ── */}
-        {selectedCounty && (
-          <div className="county-panel">
-            <button className="county-panel-close" onClick={handleClosePanel} aria-label="Close">
-              ×
-            </button>
-            <div className="county-panel-label">Selected County</div>
-            <div className="county-panel-name">{selectedCounty.name}</div>
-            <div className="county-panel-state">{selectedCounty.stateAbbr}</div>
-          </div>
+        {!countyData && !loadError && (
+          <div className="map-loading">Loading county boundaries…</div>
         )}
       </div>
 
-      {!countyData && !loadError && (
-        <div className="map-loading">Loading county boundaries…</div>
-      )}
+      {/* ── Permits panel (shown once a county is selected) ── */}
+      {selectedCounty && <PermitsPanel county={selectedCounty} />}
     </div>
   )
 }

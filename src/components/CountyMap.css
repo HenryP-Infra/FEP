@@ -1,121 +1,51 @@
-/* ── Wrapper ────────────────────────────────────────────────────────────────── */
+/* ── Wrapper ── */
 .map-wrapper {
   display: flex;
   flex-direction: column;
   width: 100%;
-  height: 100vh;
-  overflow: hidden;
-  background: #0f0f1e;
+  min-height: 100vh;
+  background: #0d0d1f;
 }
 
-/* ── Top bar ─────────────────────────────────────────────────────────────────── */
+/* ── Top bar ── */
 .map-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 14px;
-  background: rgba(10, 10, 24, 0.97);
+  gap: 14px;
+  padding: 8px 16px;
+  background: rgba(8, 8, 22, 0.97);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
   z-index: 1000;
-  min-height: 50px;
+  min-height: 56px;
 }
 
 .map-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: #fff;
   white-space: nowrap;
   letter-spacing: 0.01em;
+  flex-shrink: 0;
 }
 
-/* Search stretches to fill remaining space */
-.map-header .address-search {
-  flex: 1;
-  max-width: 480px;
-}
-
-/* ── Map body (map + side panel side-by-side) ─────────────────────────────── */
+/* ── Map body ── */
 .map-body {
   position: relative;
-  flex: 1;
-  display: flex;
-  overflow: hidden;
+  height: 62vh;
+  min-height: 340px;
+  flex-shrink: 0;
 }
 
 .leaflet-map {
-  flex: 1;
-  height: 100%;
   width: 100%;
+  height: 100%;
 }
 
-/* ── County info panel ───────────────────────────────────────────────────────── */
-.county-panel {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 200px;
-  background: rgba(10, 10, 28, 0.93);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
-  padding: 18px 16px 16px;
-  z-index: 1000;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  animation: panel-in 0.18s ease;
-}
-
-@keyframes panel-in {
-  from { opacity: 0; transform: translateY(-6px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-.county-panel-close {
-  position: absolute;
-  top: 8px;
-  right: 10px;
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.45);
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 2px 4px;
-  transition: color 0.15s;
-}
-
-.county-panel-close:hover {
-  color: #fff;
-}
-
-.county-panel-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: rgba(255, 255, 255, 0.35);
-  margin-bottom: 8px;
-}
-
-.county-panel-name {
-  font-size: 20px;
-  font-weight: 700;
-  color: #fff;
-  line-height: 1.2;
-  margin-bottom: 6px;
-  word-break: break-word;
-}
-
-.county-panel-state {
-  font-size: 28px;
-  font-weight: 800;
-  color: #4a90e2;
-  letter-spacing: 0.05em;
-}
-
-/* ── Overlays ────────────────────────────────────────────────────────────────── */
+/* ── Overlays ── */
 .map-loading {
   position: absolute;
-  bottom: 24px;
+  bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(0, 0, 0, 0.75);
@@ -136,7 +66,7 @@
   flex-shrink: 0;
 }
 
-/* ── County tooltip ──────────────────────────────────────────────────────────── */
+/* ── County tooltip ── */
 .county-tooltip {
   background: rgba(0, 0, 0, 0.85) !important;
   border: none !important;
