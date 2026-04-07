@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import './StateCountySearch.css'
 
-const US_STATES = [
+export const US_STATES = [
   { fips: '01', name: 'Alabama',        abbr: 'AL' },
   { fips: '02', name: 'Alaska',         abbr: 'AK' },
   { fips: '04', name: 'Arizona',        abbr: 'AZ' },
@@ -56,32 +56,51 @@ const US_STATES = [
   { fips: '72', name: 'Puerto Rico',    abbr: 'PR' },
 ]
 
-export { US_STATES }
-
+/**
+ * Two-step search: (1) state dropdown, (2) multi-county checkbox list.
+ * Shows selected counties as removable pills and a Run button.
+ *
+ * Props:
+ *   countyData          – raw GeoJSON object (may be null while loading)
+ *   selectedStateFips   – controlled state FIPS string | null
+ *   selectedCounties    – array of { name, stateFips, stateAbbr }
+ *   onStateChange(fips) – called when state changes (fips may be null)
+ *   onCountiesChange(arr) – called with updated county array
+ *   onRun()             – called when Run button clicked
+ */
 export default function StateCountySearch({
   countyData,
   selectedStateFips,
-  selectedCountyName,
+  selectedCounties,
   onStateChange,
-  onCountySelect,
+  onCountiesChange,
+  onRun,
 }) {
-  const [countyQuery, setCountyQuery] = useState('')
-  const [showDropdown, setShowDropdown] = useState(false)
+  const [query, setQuery]               = useState('')
+  const [dropdownOpen, setDropdownOpen] = useState(false)
   const inputRef = useRef(null)
+  const wrapRef  = useRef(null)
 
-  const selectedState = US_STATES.find(s => s.fips === selectedStateFips) || null
+  const selectedState = US_STATES.find(s => s.fips === selectedStateFips) ?? null
 
-  // When external selection changes (map click), sync the input
+  // Reset county input when state changes
   useEffect(() => {
-    setCountyQuery(selectedCountyName || '')
-  }, [selectedCountyName])
-
-  // Clear county input when state changes
-  useEffect(() => {
-    setCountyQuery('')
-    setShowDropdown(false)
+    setQuery('')
+    setDropdownOpen(false)
   }, [selectedStateFips])
 
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+        setDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  // All counties for the selected state, sorted
   const countyList = useMemo(() => {
     if (!countyData || !selectedStateFips) return []
     return countyData.features
@@ -90,35 +109,48 @@ export default function StateCountySearch({
       .sort()
   }, [countyData, selectedStateFips])
 
-  const filteredCounties = useMemo(() => {
-    const q = countyQuery.toLowerCase().trim()
-    if (!q) return countyList
-    return countyList.filter(c => c.toLowerCase().includes(q))
-  }, [countyList, countyQuery])
+  // Counties filtered by query
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase().trim()
+    return q ? countyList.filter(c => c.toLowerCase().includes(q)) : countyList
+  }, [countyList, query])
 
-  const handleStateChange = (fips) => {
-    onStateChange(fips || null)
+  const selectedNames = useMemo(
+    () => new Set(selectedCounties.map(c => c.name)),
+    [selectedCounties],
+  )
+
+  function toggleCounty(name) {
+    if (selectedNames.has(name)) {
+      onCountiesChange(selectedCounties.filter(c => c.name !== name))
+    } else {
+      onCountiesChange([
+        ...selectedCounties,
+        { name, stateFips: selectedStateFips, stateAbbr: selectedState?.abbr ?? '' },
+      ])
+    }
   }
 
-  const handleCountySelect = (countyName) => {
-    setCountyQuery(countyName)
-    setShowDropdown(false)
-    onCountySelect({
-      name: countyName,
-      stateFips: selectedStateFips,
-      stateAbbr: selectedState?.abbr || '',
-    })
+  function removeCounty(name) {
+    onCountiesChange(selectedCounties.filter(c => c.name !== name))
   }
+
+  function clearAll() {
+    onCountiesChange([])
+    setQuery('')
+  }
+
+  const canRun = selectedCounties.length > 0
 
   return (
     <div className="scs-wrapper">
-      {/* Step 1 — State */}
-      <div className="scs-step">
+      {/* ── Step 1: State ── */}
+      <div className="scs-group">
         <label className="scs-label">State</label>
         <select
           className="scs-select"
-          value={selectedStateFips || ''}
-          onChange={e => handleStateChange(e.target.value)}
+          value={selectedStateFips ?? ''}
+          onChange={e => onStateChange(e.target.value || null)}
         >
           <option value="">Select state…</option>
           {US_STATES.map(s => (
@@ -129,40 +161,107 @@ export default function StateCountySearch({
 
       {selectedStateFips && (
         <>
-          <span className="scs-arrow">›</span>
+          <span className="scs-divider">›</span>
 
-          {/* Step 2 — County */}
-          <div className="scs-step scs-step--county">
-            <label className="scs-label">County</label>
-            <div className="scs-county-wrap">
+          {/* ── Step 2: County multi-select ── */}
+          <div className="scs-group scs-group--county" ref={wrapRef}>
+            <label className="scs-label">
+              Counties
+              {selectedCounties.length > 0 && (
+                <span className="scs-count">&nbsp;{selectedCounties.length} selected</span>
+              )}
+            </label>
+
+            {/* Search input */}
+            <div className="scs-input-wrap">
               <input
                 ref={inputRef}
                 type="text"
                 className="scs-input"
-                placeholder={`Search in ${selectedState?.name}…`}
-                value={countyQuery}
-                onChange={e => { setCountyQuery(e.target.value); setShowDropdown(true) }}
-                onFocus={() => setShowDropdown(true)}
-                onBlur={() => setTimeout(() => setShowDropdown(false), 180)}
+                placeholder={
+                  countyList.length === 0
+                    ? 'Loading counties…'
+                    : `Search ${selectedState?.name} counties…`
+                }
+                value={query}
+                disabled={countyList.length === 0}
+                onChange={e => { setQuery(e.target.value); setDropdownOpen(true) }}
+                onFocus={() => setDropdownOpen(true)}
                 autoComplete="off"
                 spellCheck={false}
               />
-              {showDropdown && filteredCounties.length > 0 && (
+              {selectedCounties.length > 0 && (
+                <button
+                  className="scs-clear-btn"
+                  onClick={clearAll}
+                  title="Clear all counties"
+                  type="button"
+                >
+                  ×
+                </button>
+              )}
+
+              {/* Dropdown */}
+              {dropdownOpen && filtered.length > 0 && (
                 <ul className="scs-dropdown">
-                  {filteredCounties.slice(0, 14).map(county => (
-                    <li
-                      key={county}
-                      className={`scs-dropdown-item ${county === selectedCountyName ? 'scs-dropdown-item--active' : ''}`}
-                      onMouseDown={() => handleCountySelect(county)}
-                    >
-                      {county} County,&nbsp;<span className="scs-state-abbr">{selectedState?.abbr}</span>
+                  {filtered.slice(0, 18).map(name => {
+                    const checked = selectedNames.has(name)
+                    return (
+                      <li
+                        key={name}
+                        className={`scs-item ${checked ? 'scs-item--checked' : ''}`}
+                        onMouseDown={e => { e.preventDefault(); toggleCounty(name) }}
+                      >
+                        <span className="scs-checkbox" aria-hidden="true">
+                          {checked ? '✓' : ''}
+                        </span>
+                        <span className="scs-item-name">{name}</span>
+                        <span className="scs-item-abbr">{selectedState?.abbr}</span>
+                      </li>
+                    )
+                  })}
+                  {filtered.length > 18 && (
+                    <li className="scs-more">
+                      +{filtered.length - 18} more — type to narrow
                     </li>
-                  ))}
+                  )}
                 </ul>
               )}
             </div>
+
+            {/* Selected county pills */}
+            {selectedCounties.length > 0 && (
+              <div className="scs-pills">
+                {selectedCounties.map(c => (
+                  <span key={c.name} className="scs-pill">
+                    {c.name}
+                    <button
+                      className="scs-pill-x"
+                      onClick={() => removeCounty(c.name)}
+                      type="button"
+                      aria-label={`Remove ${c.name}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </>
+      )}
+
+      {/* ── Run button ── */}
+      {selectedStateFips && (
+        <button
+          className={`scs-run ${canRun ? 'scs-run--active' : ''}`}
+          onClick={canRun ? onRun : undefined}
+          disabled={!canRun}
+          type="button"
+          title={canRun ? 'Load map and permits' : 'Select at least one county'}
+        >
+          Run
+        </button>
       )}
     </div>
   )
